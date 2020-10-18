@@ -4,6 +4,7 @@ import Browser
 import Browser.Dom
 import Colorpicker exposing (Colorpicker)
 import Editor exposing (Editor)
+import History exposing (History)
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (..)
@@ -42,37 +43,35 @@ maxZoomFactor =
 -- MODEL
 
 
-type Mode
-    = Hovering
-    | Panning
-    | Selecting Rect
-    | Drawing WidgetId
-    | MovingSelection
-
-
 type alias Model =
     { latestId : Int
-    , mode : Mode
     , editor : Editor
-    , screen : Point
-    , selectedTool : Tool
-    , selectedColor : String
+    , history : History Editor
     }
 
 
 type alias Flags =
     { latestId : Int
+    , maxHistorySize : Int
+    , embedLeft : Float
+    , embedTop : Float
+    , embedWidth : Float
+    , embedHeight : Float
     }
 
 
 init : Flags -> ( Model, Cmd Msg )
 init flags =
+    let
+        embed =
+            Rect.fromLTWH flags.embedLeft flags.embedTop flags.embedWidth flags.embedHeight
+
+        editor =
+            Editor.init embed
+    in
     ( { latestId = flags.latestId
-      , mode = Hovering
-      , editor = Editor.init
-      , screen = { x = 0, y = 0 }
-      , selectedTool = Tool.Move
-      , selectedColor = "#2D3748"
+      , editor = editor
+      , history = History.init flags.maxHistorySize editor
       }
     , Task.perform GotViewport Browser.Dom.getViewport
     )
@@ -111,12 +110,17 @@ update msg model =
             ( model, Cmd.none )
 
         GotViewport viewport ->
-            ( { model | screen = { x = viewport.scene.width, y = viewport.scene.height } }, Cmd.none )
+            ( updateEditor (Editor.updateScreen { x = viewport.scene.width, y = viewport.scene.height }) model, Cmd.none )
 
         ShortcutPressed key ->
-            case Tool.toolFromShortcut key model.selectedTool of
+            case Tool.toolFromShortcut key model.editor.selectedTool of
                 Nothing ->
-                    ( model, Cmd.none )
+                    case key of
+                        "d" ->
+                            ( updateEditor Editor.deleteSelectedWidgets model, Cmd.none )
+
+                        _ ->
+                            ( model, Cmd.none )
 
                 Just tool ->
                     updateSelectedTool tool model
@@ -125,7 +129,7 @@ update msg model =
             updateSelectedTool tool model
 
         StartPanning ->
-            ( { model | mode = Panning }, Cmd.none )
+            ( updateEditor (Editor.updateMode Editor.Panning) model, Cmd.none )
 
         ApplyPanningDelta x y ->
             let
@@ -135,21 +139,22 @@ update msg model =
             ( updateEditor (Editor.updateWorld (World.updatePan updatedPan)) model, Cmd.none )
 
         StopPanning ->
-            ( { model | mode = Hovering }, Cmd.none )
+            ( updateEditor (Editor.updateMode Editor.Hovering) model, Cmd.none )
 
         StartSelecting screenX screenY ->
             let
                 worldPoint =
                     World.pointScreenToWorld model.editor.world { x = screenX, y = screenY }
             in
-            ( { model | mode = Selecting { x1 = worldPoint.x, y1 = worldPoint.y, x2 = worldPoint.x, y2 = worldPoint.y } }
+            ( model
                 |> updateEditor Editor.clearSelection
+                |> updateEditor (Editor.updateMode (Editor.Selecting { x1 = worldPoint.x, y1 = worldPoint.y, x2 = worldPoint.x, y2 = worldPoint.y }))
             , Cmd.none
             )
 
         SelectionMove screenX screenY ->
-            case model.mode of
-                Selecting rect ->
+            case model.editor.mode of
+                Editor.Selecting rect ->
                     let
                         worldPoint =
                             World.pointScreenToWorld model.editor.world { x = screenX, y = screenY }
@@ -157,8 +162,9 @@ update msg model =
                         updatedRect =
                             { rect | x2 = worldPoint.x, y2 = worldPoint.y }
                     in
-                    ( { model | mode = Selecting updatedRect }
+                    ( model
                         |> updateEditor (Editor.updateSelection (Selection.calculateSelection updatedRect))
+                        |> updateEditor (Editor.updateMode (Editor.Selecting updatedRect))
                     , Cmd.none
                     )
 
@@ -166,13 +172,15 @@ update msg model =
                     ( model, Cmd.none )
 
         StopSelecting ->
-            ( { model | mode = Hovering }
+            ( model
                 |> updateEditor (Editor.updateSelection Selection.clearActiveSelection)
+                |> updateEditor (Editor.updateMode Editor.Hovering)
             , Cmd.none
             )
+                |> commit
 
         StartMovingSelection ->
-            ( { model | mode = MovingSelection }, Cmd.none )
+            ( updateEditor (Editor.updateMode Editor.MovingSelection) model, Cmd.none )
 
         ApplyMovingSelectionDelta x y ->
             let
@@ -187,7 +195,7 @@ update msg model =
             )
 
         StopMovingSelection ->
-            ( { model | mode = Hovering }, Cmd.none )
+            ( updateEditor (Editor.updateMode Editor.Hovering) model, Cmd.none )
 
         ZoomMove x y delta ->
             let
@@ -198,10 +206,10 @@ update msg model =
                     model.editor.world.zoom + smoothedDelta
 
                 correctedX =
-                    x - model.editor.world.pan.x
+                    x - model.editor.world.embed.x1 - model.editor.world.pan.x
 
                 correctedY =
-                    y - model.editor.world.pan.y
+                    y - model.editor.world.embed.y1 - model.editor.world.pan.y
 
                 updatedPan =
                     { x = model.editor.world.pan.x - (correctedX * smoothedDelta * 1 / model.editor.world.zoom)
@@ -216,13 +224,16 @@ update msg model =
         StartDrawing screenX screenY ->
             let
                 ( updatedEditor, nextId ) =
-                    Editor.addNewDrawingWidget model.latestId model.selectedColor { x = screenX, y = screenY } model.editor
+                    Editor.addNewDrawingWidget model.latestId model.editor.selectedColor { x = screenX, y = screenY } model.editor
             in
-            ( { model | editor = updatedEditor, latestId = nextId, mode = Drawing model.latestId }, Cmd.none )
+            ( { model | editor = updatedEditor, latestId = nextId }
+                |> updateEditor (Editor.updateMode (Editor.Drawing model.latestId))
+            , Cmd.none
+            )
 
         DrawingMove x y ->
-            case model.mode of
-                Drawing widgetId ->
+            case model.editor.mode of
+                Editor.Drawing widgetId ->
                     ( updateEditor (Editor.updateWidget widgetId (Widget.pushWorldPointToDrawing (World.pointScreenToWorld model.editor.world { x = x, y = y }))) model
                     , Cmd.none
                     )
@@ -231,20 +242,22 @@ update msg model =
                     ( model, Cmd.none )
 
         StopDrawing ->
-            case model.mode of
-                Drawing widgetId ->
-                    ( { model | mode = Hovering }
+            case model.editor.mode of
+                Editor.Drawing widgetId ->
+                    ( model
                         |> updateEditor (Editor.updateWidget widgetId Widget.commit)
+                        |> updateEditor (Editor.updateMode Editor.Hovering)
                     , Cmd.none
                     )
+                        |> commit
 
                 _ ->
-                    ( { model | mode = Hovering }, Cmd.none )
+                    ( updateEditor (Editor.updateMode Editor.Hovering) model, Cmd.none )
 
         ColorpickerHueSelected hue ->
-            case model.selectedTool of
+            case model.editor.selectedTool of
                 Tool.Colorpicker previousTool _ ->
-                    ( { model | selectedTool = Tool.Colorpicker previousTool (Colorpicker.PickingBrightness hue) }
+                    ( updateEditor (Editor.updateSelectedTool (Tool.Colorpicker previousTool (Colorpicker.PickingBrightness hue))) model
                     , Task.attempt (\_ -> NoOp) (Browser.Dom.focus "colorpicker-brightness")
                     )
 
@@ -252,9 +265,14 @@ update msg model =
                     ( model, Cmd.none )
 
         ColorpickerBrightnessSelected hex ->
-            case model.selectedTool of
+            case model.editor.selectedTool of
                 Tool.Colorpicker previousTool _ ->
-                    ( { model | selectedTool = previousTool, selectedColor = hex }, Cmd.none )
+                    ( model
+                        |> updateEditor (Editor.updateSelectedTool previousTool)
+                        |> updateEditor (Editor.updateSelectedColor hex)
+                    , Cmd.none
+                    )
+                        |> commit
 
                 _ ->
                     ( model, Cmd.none )
@@ -262,22 +280,38 @@ update msg model =
 
 updateSelectedTool : Tool -> Model -> ( Model, Cmd Msg )
 updateSelectedTool tool model =
-    ( { model | selectedTool = tool }
-    , case tool of
+    case tool of
         Tool.Move ->
-            Cmd.none
+            ( updateEditor (Editor.updateSelectedTool tool) model, Cmd.none )
+                |> commit
 
         Tool.Pencil ->
-            Cmd.none
+            ( updateEditor (Editor.updateSelectedTool tool) model, Cmd.none )
+                |> commit
 
         Tool.Colorpicker _ _ ->
-            Task.attempt (\_ -> NoOp) (Browser.Dom.focus "colorpicker-hue")
-    )
+            ( updateEditor (Editor.updateSelectedTool tool) model
+            , Task.attempt (\_ -> NoOp) (Browser.Dom.focus "colorpicker-hue")
+            )
+
+        Tool.Undo ->
+            let
+                ( maybeEditor, history ) =
+                    History.undo model.history
+            in
+            ( { model | editor = Maybe.withDefault model.editor maybeEditor, history = history }
+            , Cmd.none
+            )
 
 
 updateEditor : (Editor -> Editor) -> Model -> Model
 updateEditor fn model =
     { model | editor = Editor.update fn model.editor }
+
+
+commit : ( Model, Cmd Msg ) -> ( Model, Cmd Msg )
+commit ( model, cmd ) =
+    ( { model | history = History.push model.editor model.history }, cmd )
 
 
 
@@ -297,8 +331,8 @@ subscriptions model =
 
 globalEvents : Model -> List (Attribute Msg)
 globalEvents model =
-    case model.mode of
-        Hovering ->
+    case model.editor.mode of
+        Editor.Hovering ->
             let
                 clickDecoder =
                     Decode.field "which" Decode.int
@@ -306,7 +340,7 @@ globalEvents model =
                             (\code ->
                                 case code of
                                     1 ->
-                                        case model.selectedTool of
+                                        case model.editor.selectedTool of
                                             Tool.Move ->
                                                 Decode.map2 StartSelecting
                                                     (Decode.field "pageX" Decode.float)
@@ -318,6 +352,9 @@ globalEvents model =
                                                     (Decode.field "pageY" Decode.float)
 
                                             Tool.Colorpicker _ _ ->
+                                                Decode.fail "not needed"
+
+                                            Tool.Undo ->
                                                 Decode.fail "not needed"
 
                                     2 ->
@@ -345,7 +382,7 @@ globalEvents model =
             , preventDefaultOn "wheel" (Decode.map alwaysPreventDefault zoomWheelDecoder)
             ]
 
-        Panning ->
+        Editor.Panning ->
             let
                 deltaDecoder =
                     Decode.map2 ApplyPanningDelta
@@ -356,7 +393,7 @@ globalEvents model =
             , preventDefaultOn "mousemove" (Decode.map alwaysPreventDefault deltaDecoder)
             ]
 
-        Selecting _ ->
+        Editor.Selecting _ ->
             let
                 selectionDecoder =
                     Decode.map2 SelectionMove
@@ -367,7 +404,7 @@ globalEvents model =
             , preventDefaultOn "mouseup" (Decode.map alwaysPreventDefault (Decode.succeed StopSelecting))
             ]
 
-        Drawing widgetId ->
+        Editor.Drawing widgetId ->
             let
                 drawingDecoder =
                     Decode.map2 DrawingMove
@@ -378,7 +415,7 @@ globalEvents model =
             , preventDefaultOn "mouseup" (Decode.map alwaysPreventDefault (Decode.succeed StopDrawing))
             ]
 
-        MovingSelection ->
+        Editor.MovingSelection ->
             let
                 deltaDecoder =
                     Decode.map2 ApplyMovingSelectionDelta
@@ -401,7 +438,15 @@ alwaysPreventDefault msg =
 
 view : Model -> Html Msg
 view model =
-    div ([ class "bg-gray-200 min-h-screen overflow-hidden", viewCursorStyle model ] ++ globalEvents model) [ viewPage model ]
+    div
+        ([ class "relative bg-gray-200 overflow-hidden"
+         , viewCursorStyle model
+         , style "width" (String.fromFloat (Rect.width model.editor.world.embed) ++ "px")
+         , style "height" (String.fromFloat (Rect.height model.editor.world.embed) ++ "px")
+         ]
+            ++ globalEvents model
+        )
+        [ viewPage model ]
 
 
 viewPage : Model -> Html Msg
@@ -415,11 +460,12 @@ viewPage model =
             , onStartMoving = StartMovingSelection
             }
         , Toolbar.view
-            { selectedTool = model.selectedTool
-            , selectedColor = model.selectedColor
+            { selectedTool = model.editor.selectedTool
+            , selectedColor = model.editor.selectedColor
             , onSelect = SelectTool
             , hueSelected = ColorpickerHueSelected
             , brightnessSelected = ColorpickerBrightnessSelected
+            , undoEnabled = History.canUndo model.history
             }
         ]
 
@@ -491,28 +537,31 @@ viewPanOffsetAndZoomStyle model =
 
 viewCursorStyle : Model -> Attribute msg
 viewCursorStyle model =
-    case model.selectedTool of
+    case model.editor.selectedTool of
         Tool.Move ->
-            case model.mode of
-                Hovering ->
+            case model.editor.mode of
+                Editor.Hovering ->
                     style "cursor" "default"
 
-                Panning ->
+                Editor.Panning ->
                     style "cursor" "grabbing"
 
-                Selecting _ ->
+                Editor.Selecting _ ->
                     style "cursor" "default"
 
-                Drawing _ ->
+                Editor.Drawing _ ->
                     style "cursor" "crosshair"
 
-                MovingSelection ->
+                Editor.MovingSelection ->
                     style "cursor" "move"
 
         Tool.Pencil ->
             style "cursor" "crosshair"
 
         Tool.Colorpicker _ _ ->
+            style "cursor" "default"
+
+        Tool.Undo ->
             style "cursor" "default"
 
 

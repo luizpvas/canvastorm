@@ -14,6 +14,7 @@ type alias Config msg =
     , onSelect : Tool -> msg
     , hueSelected : Colorpicker.Hex -> msg
     , brightnessSelected : Colorpicker.Hex -> msg
+    , undoEnabled : Bool
     }
 
 
@@ -21,15 +22,14 @@ view : Config msg -> Html msg
 view config =
     div [ class "absolute top-0 right-0 mt-2 mr-2" ]
         [ div [ class "flex items-center" ]
-            [ div [ class "bg-gray-600 text-white py-2 pl-4 pr-12 rounded-full -mr-10 shadow-md" ]
-                [ text "Hello"
-                ]
-            , div [ class "bg-white rounded-full py-2 px-4 space-x-2 flex items-center shadow-md" ]
-                [ viewToolbarButton config Tool.Move (Icon.cursor "w-4")
-                , viewToolbarButton config Tool.Pencil (Icon.pencil "w-4")
+            [ div [ class "bg-white rounded-full py-2 px-4 space-x-2 flex items-center shadow-md" ]
+                [ viewToolbarButton config Tool.Move (Icon.cursor "w-4") True
+                , viewToolbarButton config Tool.Pencil (Icon.pencil "w-4") True
                 , viewToolbarButton config
                     (Tool.Colorpicker config.selectedTool Colorpicker.PickingHue)
                     (div [ class "w-4 h-4 rounded", style "background" config.selectedColor ] [])
+                    True
+                , viewToolbarButton config Tool.Undo (Icon.undo "w-4") config.undoEnabled
                 ]
             ]
         , viewSelectedToolAdvanced config
@@ -52,18 +52,31 @@ viewSelectedToolAdvanced config =
         Tool.Pencil ->
             text ""
 
+        Tool.Undo ->
+            text ""
 
-viewToolbarButton : Config msg -> Tool -> Html msg -> Html msg
-viewToolbarButton config tool icon =
+
+viewToolbarButton : Config msg -> Tool -> Html msg -> Bool -> Html msg
+viewToolbarButton config tool icon enabled =
     let
-        className =
+        classAttr =
             if config.selectedTool == tool then
-                "flex items-center bg-blue-600 text-white rounded-md p-1"
+                [ class "flex items-center space-x-1 bg-blue-500 text-white rounded-md p-1" ]
+
+            else if enabled then
+                [ class "flex items-center space-x-1 hover:bg-gray-300 rounded-md p-1" ]
 
             else
-                "flex items-center hover:bg-gray-300 rounded-md p-1"
+                [ class "flex items-center space-x-1 rounded-md p-1 opacity-50" ]
+
+        clickAttr =
+            if enabled then
+                [ onClick (config.onSelect tool) ]
+
+            else
+                []
     in
-    button [ class className, onClick (config.onSelect tool) ]
+    button (classAttr ++ clickAttr)
         [ icon
-        , span [ class "border text-xs leading-none p-px rounded" ] [ text (Tool.toolToShortcut tool) ]
+        , span [ class "text-xs font-bold" ] [ text (Tool.toolToShortcut tool) ]
         ]

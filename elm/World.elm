@@ -7,13 +7,15 @@ import Rect exposing (Rect)
 type alias World =
     { pan : Point
     , zoom : Float
+    , embed : Rect
     }
 
 
-init : World
-init =
+init : Rect -> World
+init embed =
     { pan = { x = 0, y = 0 }
     , zoom = 1.0
+    , embed = embed
     }
 
 
@@ -31,6 +33,7 @@ pointScreenToWorld : World -> Point -> Point
 pointScreenToWorld world point =
     point
         |> Point.minus world.pan
+        |> Point.minus { x = world.embed.x1, y = world.embed.y1 }
         |> Point.scale (1 / world.zoom)
 
 
@@ -39,6 +42,7 @@ pointScreenFromWorld world point =
     point
         |> Point.scale world.zoom
         |> Point.plus world.pan
+        |> Point.plus { x = world.embed.x1, y = world.embed.y1 }
 
 
 rectScreenFromWorld : World -> Rect -> Rect

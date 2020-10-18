@@ -1,6 +1,7 @@
 module Rect exposing
     ( Rect
     , addMargin
+    , fromLTWH
     , height
     , intersects
     , isZero
@@ -30,6 +31,15 @@ type alias Rect =
 zero : Rect
 zero =
     { x1 = 0, y1 = 0, x2 = 0, y2 = 0 }
+
+
+fromLTWH : Float -> Float -> Float -> Float -> Rect
+fromLTWH l t w h =
+    { x1 = l
+    , y1 = t
+    , x2 = l + w
+    , y2 = t + h
+    }
 
 
 

@@ -7,6 +7,7 @@ type Tool
     = Move
     | Pencil
     | Colorpicker Tool Colorpicker
+    | Undo
 
 
 toolFromShortcut : String -> Tool -> Maybe Tool
@@ -20,6 +21,9 @@ toolFromShortcut key selectedTool =
 
         "c" ->
             Just (Colorpicker selectedTool Colorpicker.PickingHue)
+
+        "ctrl+z" ->
+            Just Undo
 
         _ ->
             Nothing
@@ -36,3 +40,6 @@ toolToShortcut tool =
 
         Colorpicker _ _ ->
             "C"
+
+        Undo ->
+            "Ctrl+Z"

@@ -23,7 +23,11 @@ export class Canvastorm {
      */
     keydown(ev) {
         if (this.app) {
-            this.app.ports.shortcutPressed.send(ev.key);
+            let key = ev.key;
+
+            if (ev.ctrlKey) key = "ctrl+" + key;
+
+            this.app.ports.shortcutPressed.send(key);
         }
     }
 
@@ -33,11 +37,20 @@ export class Canvastorm {
      * @param {HTMLElement} element
      */
     render(element) {
-        this.app = Elm.Main.init({
-            node: element,
-            flags: {
-                latestId: new Date().getTime(),
-            },
+        requestAnimationFrame(() => {
+            let rect = element.getBoundingClientRect();
+
+            this.app = Elm.Main.init({
+                node: element,
+                flags: {
+                    latestId: new Date().getTime(),
+                    maxHistorySize: 50,
+                    embedLeft: rect.left,
+                    embedTop: rect.top,
+                    embedWidth: rect.width,
+                    embedHeight: rect.height,
+                },
+            });
         });
     }
 }
