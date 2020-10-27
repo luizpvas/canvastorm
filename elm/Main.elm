@@ -1,4 +1,4 @@
-module Main exposing (main)
+module Main exposing (Model, Msg(..), init, main, update)
 
 import Browser
 import Browser.Dom
@@ -99,8 +99,10 @@ type Msg
     | StartDrawing Float Float
     | DrawingMove Float Float
     | StopDrawing
+    | StartTyping Float Float
     | ColorpickerHueSelected Colorpicker.Hex
     | ColorpickerBrightnessSelected Colorpicker.Hex
+    | GotWidgetMsg WidgetId Widget.Msg
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -118,6 +120,7 @@ update msg model =
                     case key of
                         "d" ->
                             ( updateEditor Editor.deleteSelectedWidgets model, Cmd.none )
+                                |> commit
 
                         _ ->
                             ( model, Cmd.none )
@@ -189,7 +192,7 @@ update msg model =
                         |> Point.scale (1 / model.editor.world.zoom)
             in
             ( model
-                |> updateEditor (Editor.updateWidgets model.editor.selection.widgetsIds (Widget.updateRect (Rect.shift delta)))
+                |> updateEditor (Editor.updateSelectedWidgets (Widget.updateRect (Rect.shift delta)))
                 |> updateEditor (Editor.updateSelection Selection.recalculateWidgetsArea)
             , Cmd.none
             )
@@ -254,6 +257,20 @@ update msg model =
                 _ ->
                     ( updateEditor (Editor.updateMode Editor.Hovering) model, Cmd.none )
 
+        StartTyping screenX screenY ->
+            let
+                widgetId =
+                    model.latestId
+
+                ( updatedEditor, nextId ) =
+                    Editor.addNewTextWidget widgetId { x = screenX, y = screenY } model.editor
+            in
+            ( { model | editor = updatedEditor, latestId = nextId }
+                |> updateEditor (Editor.updateSelection (\_ _ -> Selection.Editing widgetId))
+                |> updateEditor (Editor.updateSelectedTool Tool.Move)
+            , Task.attempt (\_ -> NoOp) (Browser.Dom.focus (Widget.domId widgetId))
+            )
+
         ColorpickerHueSelected hue ->
             case model.editor.selectedTool of
                 Tool.Colorpicker previousTool _ ->
@@ -277,6 +294,27 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
+        GotWidgetMsg widgetId subMsg ->
+            case Editor.findWidget widgetId model.editor |> Maybe.map (Widget.update subMsg) of
+                Nothing ->
+                    ( model, Cmd.none )
+
+                Just ( updatedWidget, outgoingMsg ) ->
+                    updateEditor (Editor.updateWidget widgetId (\_ -> updatedWidget)) model
+                        |> updateOutgoingWidget outgoingMsg
+
+
+updateOutgoingWidget : Widget.OutgoingMsg -> Model -> ( Model, Cmd Msg )
+updateOutgoingWidget msg model =
+    case msg of
+        Widget.NoOp ->
+            ( model, Cmd.none )
+
+        Widget.SelectForEditing widgetId ->
+            ( updateEditor (Editor.updateSelection (\_ _ -> Selection.Editing widgetId)) model
+            , Task.attempt (\_ -> NoOp) (Browser.Dom.focus (Widget.domId widgetId))
+            )
+
 
 updateSelectedTool : Tool -> Model -> ( Model, Cmd Msg )
 updateSelectedTool tool model =
@@ -286,6 +324,10 @@ updateSelectedTool tool model =
                 |> commit
 
         Tool.Pencil ->
+            ( updateEditor (Editor.updateSelectedTool tool) model, Cmd.none )
+                |> commit
+
+        Tool.Text ->
             ( updateEditor (Editor.updateSelectedTool tool) model, Cmd.none )
                 |> commit
 
@@ -353,6 +395,11 @@ globalEvents model =
 
                                             Tool.Colorpicker _ _ ->
                                                 Decode.fail "not needed"
+
+                                            Tool.Text ->
+                                                Decode.map2 StartTyping
+                                                    (Decode.field "pageX" Decode.float)
+                                                    (Decode.field "pageY" Decode.float)
 
                                             Tool.Undo ->
                                                 Decode.fail "not needed"
@@ -480,8 +527,10 @@ viewEditor model =
             (\widget ->
                 Widget.view
                     { widget = widget
-                    , isSelected = List.member widget.id model.editor.selection.widgetsIds
+                    , isSelected = Editor.isWidgetSelected widget.id model.editor
+                    , isEditing = Editor.isEditingWidget widget.id model.editor
                     }
+                    |> Html.map (GotWidgetMsg widget.id)
             )
             model.editor.widgets
         )
@@ -557,6 +606,9 @@ viewCursorStyle model =
 
         Tool.Pencil ->
             style "cursor" "crosshair"
+
+        Tool.Text ->
+            style "cursor" "text"
 
         Tool.Colorpicker _ _ ->
             style "cursor" "default"

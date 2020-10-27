@@ -1,9 +1,12 @@
 module Widget exposing
     ( DrawingPointsPosition(..)
+    , Msg
+    , OutgoingMsg(..)
     , Widget
     , WidgetId
     , WidgetRender(..)
     , commit
+    , domId
     , pushWorldPointToDrawing
     , update
     , updateRect
@@ -14,6 +17,8 @@ import Colorpicker
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (..)
+import Json.Decode as Decode exposing (Decoder)
+import Json.Encode as Encode exposing (Value)
 import Point exposing (Point)
 import Rect exposing (Rect)
 import Svg
@@ -47,15 +52,53 @@ type DrawingPointsPosition
 
 type WidgetRender
     = Drawing Colorpicker.Hex DrawingPointsPosition (List Point)
+    | Text String
+
+
+
+-- UPDATE
+
+
+type Msg
+    = SetText String
+    | SetSize Float Float
+    | Select
+
+
+type OutgoingMsg
+    = NoOp
+    | SelectForEditing WidgetId
+
+
+update : Msg -> Widget -> ( Widget, OutgoingMsg )
+update msg widget =
+    case msg of
+        SetText str ->
+            case widget.render of
+                Drawing _ _ _ ->
+                    ( widget, NoOp )
+
+                Text _ ->
+                    ( { widget | render = Text str }, NoOp )
+
+        SetSize width height ->
+            ( { widget | rect = widget.rect |> Rect.setWidth width |> Rect.setHeight height }, NoOp )
+
+        Select ->
+            ( widget, SelectForEditing widget.id )
+
+
+
+-- GETTERS
+
+
+domId : WidgetId -> String
+domId widgetId =
+    "widget-" ++ String.fromInt widgetId
 
 
 
 -- UPDATES
-
-
-update : (Widget -> Widget) -> Widget -> Widget
-update fn widget =
-    fn widget
 
 
 updateRect : (Rect -> Rect) -> Widget -> Widget
@@ -77,6 +120,9 @@ pushWorldPointToDrawing { x, y } widget =
                     }
             }
 
+        _ ->
+            widget
+
 
 {-| Called after the userr finishes "drawing" the widget.
 -}
@@ -95,6 +141,9 @@ commit widget =
                 | render = Drawing hexColor LocalPosition (List.map shift points)
             }
 
+        Text _ ->
+            widget
+
 
 
 -- VIEW
@@ -103,10 +152,11 @@ commit widget =
 type alias Config =
     { widget : Widget
     , isSelected : Bool
+    , isEditing : Bool
     }
 
 
-view : Config -> Html msg
+view : Config -> Html Msg
 view config =
     let
         widget =
@@ -146,3 +196,38 @@ view config =
                     ]
                     []
                 ]
+
+        Text str ->
+            if config.isEditing then
+                div
+                    [ class "absolute w-10 h-10 bg-red-100"
+                    , style "top" (String.fromFloat widget.rect.y1 ++ "px")
+                    , style "left" (String.fromFloat widget.rect.x1 ++ "px")
+                    ]
+                    [ node "canvastorm-widget-textarea"
+                        [ id (domId widget.id)
+                        , class "border-2 border-red-500"
+                        , value str
+                        , onInput SetText
+                        , on "change-size" sizeDecoder
+                        ]
+                        []
+                    ]
+
+            else
+                div
+                    [ class "absolute bg-red-100 border-2 whitespace-pre"
+                    , style "top" (String.fromFloat widget.rect.y1 ++ "px")
+                    , style "left" (String.fromFloat widget.rect.x1 ++ "px")
+                    , style "width" (String.fromFloat (Rect.width widget.rect) ++ "px")
+                    , style "height" (String.fromFloat (Rect.height widget.rect) ++ "px")
+                    , onClick Select
+                    ]
+                    [ text str ]
+
+
+sizeDecoder : Decoder Msg
+sizeDecoder =
+    Decode.map2 SetSize
+        (Decode.at [ "detail", "width" ] Decode.float)
+        (Decode.at [ "detail", "height" ] Decode.float)

@@ -25,6 +25,7 @@ view config =
             [ div [ class "bg-white rounded-full py-2 px-4 space-x-2 flex items-center shadow-md" ]
                 [ viewToolbarButton config Tool.Move (Icon.cursor "w-4") True
                 , viewToolbarButton config Tool.Pencil (Icon.pencil "w-4") True
+                , viewToolbarButton config Tool.Text (Icon.pencil "w-4") True
                 , viewToolbarButton config
                     (Tool.Colorpicker config.selectedTool Colorpicker.PickingHue)
                     (div [ class "w-4 h-4 rounded", style "background" config.selectedColor ] [])
@@ -50,6 +51,9 @@ viewSelectedToolAdvanced config =
             text ""
 
         Tool.Pencil ->
+            text ""
+
+        Tool.Text ->
             text ""
 
         Tool.Undo ->

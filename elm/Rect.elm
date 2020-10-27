@@ -7,6 +7,8 @@ module Rect exposing
     , isZero
     , left
     , scale
+    , setHeight
+    , setWidth
     , shift
     , top
     , width
@@ -69,6 +71,16 @@ addMargin val rect =
 scale : Float -> Rect -> Rect
 scale f rect =
     { x1 = rect.x1 * f, x2 = rect.x2 * f, y1 = rect.y1 * f, y2 = rect.y2 * f }
+
+
+setWidth : Float -> Rect -> Rect
+setWidth w rect =
+    { rect | x2 = rect.x1 + w }
+
+
+setHeight : Float -> Rect -> Rect
+setHeight h rect =
+    { rect | y2 = rect.y1 + h }
 
 
 

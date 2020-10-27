@@ -6,6 +6,7 @@ import Colorpicker exposing (Colorpicker)
 type Tool
     = Move
     | Pencil
+    | Text
     | Colorpicker Tool Colorpicker
     | Undo
 
@@ -18,6 +19,9 @@ toolFromShortcut key selectedTool =
 
         "p" ->
             Just Pencil
+
+        "t" ->
+            Just Text
 
         "c" ->
             Just (Colorpicker selectedTool Colorpicker.PickingHue)
@@ -37,6 +41,9 @@ toolToShortcut tool =
 
         Pencil ->
             "P"
+
+        Text ->
+            "T"
 
         Colorpicker _ _ ->
             "C"

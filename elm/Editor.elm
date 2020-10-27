@@ -2,14 +2,19 @@ module Editor exposing
     ( Editor
     , Mode(..)
     , addNewDrawingWidget
+    , addNewTextWidget
     , clearSelection
     , deleteSelectedWidgets
+    , findWidget
     , init
+    , isEditingWidget
+    , isWidgetSelected
     , update
     , updateMode
     , updateScreen
     , updateSelectedColor
     , updateSelectedTool
+    , updateSelectedWidgets
     , updateSelection
     , updateWidget
     , updateWidgets
@@ -56,6 +61,23 @@ init embed =
     }
 
 
+findWidget : WidgetId -> Editor -> Maybe Widget
+findWidget widgetId editor =
+    editor.widgets |> List.filter (\widget -> widget.id == widgetId) |> List.head
+
+
+{-| Is the given widget id currently selected?
+-}
+isWidgetSelected : WidgetId -> Editor -> Bool
+isWidgetSelected widgetId editor =
+    List.member widgetId (Selection.widgetsIds editor.selection)
+
+
+isEditingWidget : WidgetId -> Editor -> Bool
+isEditingWidget widgetId editor =
+    Selection.isEditing widgetId editor.selection
+
+
 update : (Editor -> Editor) -> Editor -> Editor
 update fn editor =
     fn editor
@@ -69,11 +91,6 @@ updateWorld fn editor =
 updateSelection : (List Widget -> Selection -> Selection) -> Editor -> Editor
 updateSelection fn editor =
     { editor | selection = fn editor.widgets editor.selection }
-
-
-updateWidget : WidgetId -> (Widget -> Widget) -> Editor -> Editor
-updateWidget id =
-    updateWidgets [ id ]
 
 
 updateScreen : Point -> Editor -> Editor
@@ -94,6 +111,16 @@ updateSelectedTool tool editor =
 updateSelectedColor : String -> Editor -> Editor
 updateSelectedColor hex editor =
     { editor | selectedColor = hex }
+
+
+updateWidget : WidgetId -> (Widget -> Widget) -> Editor -> Editor
+updateWidget id =
+    updateWidgets [ id ]
+
+
+updateSelectedWidgets : (Widget -> Widget) -> Editor -> Editor
+updateSelectedWidgets fn editor =
+    updateWidgets (Selection.widgetsIds editor.selection) fn editor
 
 
 updateWidgets : List WidgetId -> (Widget -> Widget) -> Editor -> Editor
@@ -118,7 +145,7 @@ deleteSelectedWidgets editor =
     let
         widgets =
             editor.widgets
-                |> List.filter (\widget -> not (List.member widget.id editor.selection.widgetsIds))
+                |> List.filter (\widget -> not (List.member widget.id (Selection.widgetsIds editor.selection)))
     in
     { editor | widgets = widgets }
         |> updateSelection (\_ selection -> Selection.init)
@@ -140,6 +167,23 @@ addNewDrawingWidget latestId hexColor screenPoint editor =
                 ++ [ { id = latestId
                      , rect = { x1 = worldPoint.x, y1 = worldPoint.y, x2 = worldPoint.x, y2 = worldPoint.y }
                      , render = Widget.Drawing hexColor Widget.WorldPosition [ worldPoint ]
+                     }
+                   ]
+    in
+    ( { editor | widgets = updatedWidgets }, latestId + 1 )
+
+
+addNewTextWidget : Int -> Point -> Editor -> ( Editor, Int )
+addNewTextWidget latestId anchor editor =
+    let
+        worldPoint =
+            World.pointScreenToWorld editor.world anchor
+
+        updatedWidgets =
+            editor.widgets
+                ++ [ { id = latestId
+                     , rect = { x1 = worldPoint.x, y1 = worldPoint.y, x2 = worldPoint.x, y2 = worldPoint.y }
+                     , render = Widget.Text ""
                      }
                    ]
     in

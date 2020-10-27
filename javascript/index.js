@@ -1,5 +1,6 @@
 import "../css/app.css";
 import { Elm } from "../elm/Main";
+import "./web-components/canvastorm-widget-textarea";
 
 export class Canvastorm {
     constructor() {
@@ -23,12 +24,27 @@ export class Canvastorm {
      */
     keydown(ev) {
         if (this.app) {
+            if (this.shouldIgnoreKeypress()) return;
+
             let key = ev.key;
 
             if (ev.ctrlKey) key = "ctrl+" + key;
 
             this.app.ports.shortcutPressed.send(key);
         }
+    }
+
+    /**
+     * The user just pressed a key. Should we send to the Elm app for a possible shortcut or not?
+     *
+     * @return {boolean}
+     */
+    shouldIgnoreKeypress() {
+        if (!document.activeElement) return false;
+        if (document.activeElement.tagName == "TEXTAREA") return true;
+        if (document.activeElement.tagName == "INPUT") return true;
+
+        return false;
     }
 
     /**
