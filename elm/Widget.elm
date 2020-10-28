@@ -1,6 +1,5 @@
 module Widget exposing
-    ( DrawingPointsPosition(..)
-    , Msg
+    ( Msg
     , OutgoingMsg(..)
     , Widget
     , WidgetRender(..)
@@ -21,6 +20,7 @@ import Point exposing (Point)
 import Rect exposing (Rect)
 import Svg
 import Svg.Attributes
+import Widget.Drawing
 import Widget.Text
 import WidgetId exposing (WidgetId)
 
@@ -41,13 +41,8 @@ type alias Widget =
     }
 
 
-type DrawingPointsPosition
-    = WorldPosition
-    | LocalPosition
-
-
 type WidgetRender
-    = Drawing Colorpicker.Hex DrawingPointsPosition (List Point)
+    = Drawing Widget.Drawing.Model
     | Text String
 
 
@@ -71,7 +66,7 @@ update msg widget =
     case msg of
         SetText str ->
             case widget.render of
-                Drawing _ _ _ ->
+                Drawing _ ->
                     ( widget, NoOp )
 
                 Text _ ->
@@ -96,9 +91,9 @@ updateRect fn widget =
 pushWorldPointToDrawing : Point -> Widget -> Widget
 pushWorldPointToDrawing { x, y } widget =
     case widget.render of
-        Drawing hexColor position points ->
+        Drawing model ->
             { widget
-                | render = Drawing hexColor position (points ++ [ { x = x, y = y } ])
+                | render = Drawing (Widget.Drawing.pushPoint { x = x, y = y } model)
                 , rect =
                     { x1 = Basics.min widget.rect.x1 (x - strokeWidth)
                     , y1 = Basics.min widget.rect.y1 (y - strokeWidth)
@@ -111,12 +106,12 @@ pushWorldPointToDrawing { x, y } widget =
             widget
 
 
-{-| Called after the userr finishes "drawing" the widget.
+{-| Called after the user finishes "drawing" the widget.
 -}
 commit : Widget -> Widget
 commit widget =
     case widget.render of
-        Drawing hexColor _ points ->
+        Drawing model ->
             let
                 shift =
                     \point ->
@@ -124,9 +119,7 @@ commit widget =
                         , y = point.y - Rect.top widget.rect
                         }
             in
-            { widget
-                | render = Drawing hexColor LocalPosition (List.map shift points)
-            }
+            { widget | render = Drawing (Widget.Drawing.commit shift model) }
 
         Text _ ->
             widget
@@ -145,50 +138,19 @@ type alias Config =
 
 view : Config -> Html Msg
 view config =
-    let
-        widget =
-            config.widget
-    in
-    case widget.render of
-        Drawing hexColor position points ->
-            let
-                polylinePoints =
-                    case position of
-                        WorldPosition ->
-                            List.map (\point -> String.fromFloat (point.x - Rect.left widget.rect) ++ "," ++ String.fromFloat (point.y - Rect.top widget.rect)) points
-                                |> String.join " "
-
-                        LocalPosition ->
-                            List.map (\point -> String.fromFloat point.x ++ "," ++ String.fromFloat point.y) points
-                                |> String.join " "
-
-                strokeColor =
-                    if config.isSelected then
-                        "blue"
-
-                    else
-                        hexColor
-            in
-            Svg.svg
-                [ Svg.Attributes.width (String.fromFloat (Rect.width widget.rect) ++ "px")
-                , Svg.Attributes.height (String.fromFloat (Rect.height widget.rect) ++ "px")
-                , Svg.Attributes.style <| "top: " ++ String.fromFloat widget.rect.y1 ++ "px; left: " ++ String.fromFloat widget.rect.x1 ++ "px;"
-                , Svg.Attributes.class "absolute"
-                ]
-                [ Svg.polyline
-                    [ Svg.Attributes.fill "none"
-                    , Svg.Attributes.stroke strokeColor
-                    , Svg.Attributes.strokeWidth "3px"
-                    , Svg.Attributes.points polylinePoints
-                    ]
-                    []
-                ]
+    case config.widget.render of
+        Drawing model ->
+            Widget.Drawing.view
+                { model = model
+                , rect = config.widget.rect
+                , isSelected = config.isSelected
+                }
 
         Text str ->
             Widget.Text.view
                 { text = str
-                , rect = widget.rect
-                , domId = WidgetId.domId widget.id
+                , rect = config.widget.rect
+                , domId = WidgetId.domId config.widget.id
                 , isSelected = config.isSelected
                 , isEditing = config.isEditing
                 , select = Select

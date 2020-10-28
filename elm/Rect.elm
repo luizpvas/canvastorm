@@ -143,17 +143,9 @@ height rect =
 
 top : Rect -> Float
 top rect =
-    if rect.y1 < rect.y2 then
-        rect.y1
-
-    else
-        rect.y2
+    Basics.min rect.y1 rect.y2
 
 
 left : Rect -> Float
 left rect =
-    if rect.x1 < rect.x2 then
-        rect.x1
-
-    else
-        rect.x2
+    Basics.min rect.x1 rect.x2

@@ -27,6 +27,7 @@ import Rect exposing (Rect)
 import Selection exposing (Selection)
 import Tool exposing (Tool)
 import Widget exposing (Widget)
+import Widget.Drawing
 import WidgetId exposing (WidgetId)
 import World exposing (World)
 
@@ -167,7 +168,7 @@ addNewDrawingWidget latestId hexColor screenPoint editor =
             editor.widgets
                 ++ [ { id = WidgetId.fromInt latestId
                      , rect = { x1 = worldPoint.x, y1 = worldPoint.y, x2 = worldPoint.x, y2 = worldPoint.y }
-                     , render = Widget.Drawing hexColor Widget.WorldPosition [ worldPoint ]
+                     , render = Widget.Drawing (Widget.Drawing.init hexColor worldPoint)
                      }
                    ]
     in
