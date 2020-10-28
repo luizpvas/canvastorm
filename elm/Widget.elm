@@ -3,10 +3,8 @@ module Widget exposing
     , Msg
     , OutgoingMsg(..)
     , Widget
-    , WidgetId
     , WidgetRender(..)
     , commit
-    , domId
     , pushWorldPointToDrawing
     , update
     , updateRect
@@ -23,6 +21,8 @@ import Point exposing (Point)
 import Rect exposing (Rect)
 import Svg
 import Svg.Attributes
+import Widget.Text
+import WidgetId exposing (WidgetId)
 
 
 
@@ -32,10 +32,6 @@ import Svg.Attributes
 strokeWidth : Float
 strokeWidth =
     3.0
-
-
-type alias WidgetId =
-    Int
 
 
 type alias Widget =
@@ -86,15 +82,6 @@ update msg widget =
 
         Select ->
             ( widget, SelectForEditing widget.id )
-
-
-
--- GETTERS
-
-
-domId : WidgetId -> String
-domId widgetId =
-    "widget-" ++ String.fromInt widgetId
 
 
 
@@ -198,36 +185,13 @@ view config =
                 ]
 
         Text str ->
-            if config.isEditing then
-                div
-                    [ class "absolute w-10 h-10 bg-red-100"
-                    , style "top" (String.fromFloat widget.rect.y1 ++ "px")
-                    , style "left" (String.fromFloat widget.rect.x1 ++ "px")
-                    ]
-                    [ node "canvastorm-widget-textarea"
-                        [ id (domId widget.id)
-                        , class "border-2 border-red-500"
-                        , value str
-                        , onInput SetText
-                        , on "change-size" sizeDecoder
-                        ]
-                        []
-                    ]
-
-            else
-                div
-                    [ class "absolute bg-red-100 border-2 whitespace-pre"
-                    , style "top" (String.fromFloat widget.rect.y1 ++ "px")
-                    , style "left" (String.fromFloat widget.rect.x1 ++ "px")
-                    , style "width" (String.fromFloat (Rect.width widget.rect) ++ "px")
-                    , style "height" (String.fromFloat (Rect.height widget.rect) ++ "px")
-                    , onClick Select
-                    ]
-                    [ text str ]
-
-
-sizeDecoder : Decoder Msg
-sizeDecoder =
-    Decode.map2 SetSize
-        (Decode.at [ "detail", "width" ] Decode.float)
-        (Decode.at [ "detail", "height" ] Decode.float)
+            Widget.Text.view
+                { text = str
+                , rect = widget.rect
+                , domId = WidgetId.domId widget.id
+                , isSelected = config.isSelected
+                , isEditing = config.isEditing
+                , select = Select
+                , setText = SetText
+                , setSize = SetSize
+                }

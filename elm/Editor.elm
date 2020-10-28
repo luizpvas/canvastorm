@@ -26,7 +26,8 @@ import Point exposing (Point)
 import Rect exposing (Rect)
 import Selection exposing (Selection)
 import Tool exposing (Tool)
-import Widget exposing (Widget, WidgetId)
+import Widget exposing (Widget)
+import WidgetId exposing (WidgetId)
 import World exposing (World)
 
 
@@ -164,7 +165,7 @@ addNewDrawingWidget latestId hexColor screenPoint editor =
 
         updatedWidgets =
             editor.widgets
-                ++ [ { id = latestId
+                ++ [ { id = WidgetId.fromInt latestId
                      , rect = { x1 = worldPoint.x, y1 = worldPoint.y, x2 = worldPoint.x, y2 = worldPoint.y }
                      , render = Widget.Drawing hexColor Widget.WorldPosition [ worldPoint ]
                      }
@@ -173,18 +174,18 @@ addNewDrawingWidget latestId hexColor screenPoint editor =
     ( { editor | widgets = updatedWidgets }, latestId + 1 )
 
 
-addNewTextWidget : Int -> Point -> Editor -> ( Editor, Int )
-addNewTextWidget latestId anchor editor =
+addNewTextWidget : WidgetId -> Point -> Editor -> ( Editor, WidgetId )
+addNewTextWidget widgetId anchor editor =
     let
         worldPoint =
             World.pointScreenToWorld editor.world anchor
 
         updatedWidgets =
             editor.widgets
-                ++ [ { id = latestId
+                ++ [ { id = widgetId
                      , rect = { x1 = worldPoint.x, y1 = worldPoint.y, x2 = worldPoint.x, y2 = worldPoint.y }
                      , render = Widget.Text ""
                      }
                    ]
     in
-    ( { editor | widgets = updatedWidgets }, latestId + 1 )
+    ( { editor | widgets = updatedWidgets }, WidgetId.next widgetId )

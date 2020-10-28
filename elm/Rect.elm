@@ -73,11 +73,17 @@ scale f rect =
     { x1 = rect.x1 * f, x2 = rect.x2 * f, y1 = rect.y1 * f, y2 = rect.y2 * f }
 
 
+{-| Updates the width of the given rect. Rects are stored as four points instead of origin and size, that's why
+we need a bit of math to set the width.
+-}
 setWidth : Float -> Rect -> Rect
 setWidth w rect =
     { rect | x2 = rect.x1 + w }
 
 
+{-| Updates the height of the given rect. Rects are stored as four points instead of origin and size, that's why
+we need a bit of math to set the height.
+-}
 setHeight : Float -> Rect -> Rect
 setHeight h rect =
     { rect | y2 = rect.y1 + h }

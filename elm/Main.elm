@@ -16,7 +16,8 @@ import Selection
 import Task
 import Tool exposing (Tool)
 import Toolbar
-import Widget exposing (Widget, WidgetId)
+import Widget exposing (Widget)
+import WidgetId exposing (WidgetId)
 import World exposing (World)
 
 
@@ -230,7 +231,7 @@ update msg model =
                     Editor.addNewDrawingWidget model.latestId model.editor.selectedColor { x = screenX, y = screenY } model.editor
             in
             ( { model | editor = updatedEditor, latestId = nextId }
-                |> updateEditor (Editor.updateMode (Editor.Drawing model.latestId))
+                |> updateEditor (Editor.updateMode (Editor.Drawing (WidgetId.fromInt model.latestId)))
             , Cmd.none
             )
 
@@ -260,15 +261,15 @@ update msg model =
         StartTyping screenX screenY ->
             let
                 widgetId =
-                    model.latestId
+                    WidgetId.fromInt model.latestId
 
                 ( updatedEditor, nextId ) =
                     Editor.addNewTextWidget widgetId { x = screenX, y = screenY } model.editor
             in
-            ( { model | editor = updatedEditor, latestId = nextId }
+            ( { model | editor = updatedEditor, latestId = WidgetId.toInt nextId }
                 |> updateEditor (Editor.updateSelection (\_ _ -> Selection.Editing widgetId))
                 |> updateEditor (Editor.updateSelectedTool Tool.Move)
-            , Task.attempt (\_ -> NoOp) (Browser.Dom.focus (Widget.domId widgetId))
+            , Task.attempt (\_ -> NoOp) (Browser.Dom.focus (WidgetId.domId widgetId))
             )
 
         ColorpickerHueSelected hue ->
@@ -312,7 +313,7 @@ updateOutgoingWidget msg model =
 
         Widget.SelectForEditing widgetId ->
             ( updateEditor (Editor.updateSelection (\_ _ -> Selection.Editing widgetId)) model
-            , Task.attempt (\_ -> NoOp) (Browser.Dom.focus (Widget.domId widgetId))
+            , Task.attempt (\_ -> NoOp) (Browser.Dom.focus (WidgetId.domId widgetId))
             )
 
 

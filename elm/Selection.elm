@@ -15,7 +15,8 @@ import Html.Events exposing (..)
 import HtmlEvents
 import Json.Decode as Decode
 import Rect exposing (Rect)
-import Widget exposing (Widget, WidgetId)
+import Widget exposing (Widget)
+import WidgetId exposing (WidgetId)
 import World exposing (World)
 
 
